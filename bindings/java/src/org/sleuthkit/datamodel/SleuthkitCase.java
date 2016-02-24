@@ -674,17 +674,38 @@ public class SleuthkitCase {
 			// populate a new tsk_files table.
 			//
 			// TODO: Do this right.
-			statement.execute("ALTER TABLE tsk_files ADD COLUMN data_source_obj_id BIGINT NOT NULL DEFAULT -1;");
-			resultSet = statement.executeQuery("SELECT tsk_files.obj_id, par_obj_id FROM tsk_files, tsk_objects WHERE tsk_files.obj_id = tsk_objects.obj_id");
+
+			resultSet = queryStatement.executeQuery("SELECT * FROM tsk_files");
+			statement.execute("CREATE TABLE tsk_files_new (obj_id BIGSERIAL PRIMARY KEY, fs_obj_id BIGINT, data_source_obj_id BIGINT, attr_type INTEGER, attr_id INTEGER, name TEXT NOT NULL, meta_addr BIGINT, meta_seq BIGINT, type INTEGER, has_layout INTEGER, has_path INTEGER, dir_type INTEGER, meta_type INTEGER, dir_flags INTEGER, meta_flags INTEGER, size BIGINT, ctime BIGINT, crtime BIGINT, atime BIGINT, mtime BIGINT, mode INTEGER, uid INTEGER, gid INTEGER, md5 TEXT, known INTEGER, parent_path TEXT, mime_type TEXT, "
+					+ "FOREIGN KEY(obj_id) REFERENCES tsk_objects(obj_id), FOREIGN KEY(fs_obj_id) REFERENCES tsk_fs_info(obj_id), FOREIGN KEY(data_source_obj_id) REFERENCES data_source_info(obj_id));");
 			while (resultSet.next()) {
 				long fileId = resultSet.getLong("obj_id");
 				long dataSourceId = getDataSourceObjectId(connection, fileId);
-				updateStatement.executeUpdate("UPDATE tsk_files SET data_source_obj_id = " + dataSourceId + " WHERE obj_id = " + fileId + ";");
+				String fsObjId = resultSet.getLong("fs_obj_id") != 0 ? "" + resultSet.getLong("fs_obj_id") : "NULL";
+				String attrType = resultSet.getInt("attr_type") != 0 ? "" + resultSet.getInt("attr_type") : "NULL";
+				String attrId = resultSet.getString("attr_id") == null ? "NULL" : resultSet.getShort("attr_id") + "";
+				String query = "INSERT INTO tsk_files_new (obj_id, fs_obj_id, data_source_obj_id, attr_type, attr_id, name, meta_addr, meta_seq, type, has_layout, has_path, dir_type, meta_type, dir_flags, meta_flags, size, ctime, crtime, atime, mtime, mode, uid, gid, md5, known, parent_path, mime_type) "
+						+ "VALUES(" + resultSet.getLong("obj_id") + ", " + fsObjId + ", " + dataSourceId + ", " + attrType + ", "
+						+ attrId + ", '" + resultSet.getString("name") + "', " + resultSet.getLong("meta_addr") + ", " + resultSet.getShort("meta_seq") + ", "
+						+ resultSet.getShort("type") + ", " + resultSet.getShort("has_layout") + ", " + resultSet.getShort("has_path") + ", " + resultSet.getShort("dir_type") + ", "
+						+ resultSet.getShort("meta_type") + ", " + resultSet.getShort("dir_flags") + ", " + resultSet.getShort("meta_flags") + ", " + resultSet.getLong("size") + ", "
+						+ resultSet.getLong("ctime") + ", " + resultSet.getLong("crtime") + ", " + resultSet.getLong("atime")
+						+ ", " + resultSet.getLong("mtime") + ", " + resultSet.getLong("mode") + ", " + resultSet.getShort("uid")
+						+ ", " + resultSet.getShort("gid") + ", '" + resultSet.getString("md5")
+						+ "', " + resultSet.getShort("known") + ", '" + resultSet.getString("parent_path") + "', '" + resultSet.getString("mime_type") + "');";
+				updateStatement.executeUpdate(query);
 			}
+			statement.execute("DROP TABLE tsk_files");
+			statement.execute("ALTER TABLE tsk_files_new RENAME TO tsk_files");
+			queryResultSet.close();
 			resultSet.close();
-
+			resultSet = null;
+			queryResultSet = null;
 			return 4;
 
+		} catch (SQLException e) {
+			e.printStackTrace();
+			throw e;
 		} finally {
 			closeResultSet(queryResultSet);
 			closeStatement(queryStatement);
